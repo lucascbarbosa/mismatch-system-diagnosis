@@ -75,10 +75,6 @@ class Simulator(object):
                 match_count = 0
                 A, B = self.create_system()
                 real_models.append((A, B))
-                # print("Mismatch")
-                # print(i)
-                # print(A)
-                # print(A_hat)
             if (
                 rand > mismatch_ratio
                 and mismatch
@@ -89,10 +85,6 @@ class Simulator(object):
                 A_hat, B_hat = A.copy(), B.copy()
                 estimated_models.append((A_hat, B_hat))
                 y[i, :] = y[i - 1, :]
-                # print("Match")
-                # print(i)
-                # print(A)
-                # print(A_hat)
 
             if mismatch:
                 mismatch_count += 1
@@ -119,30 +111,6 @@ class Simulator(object):
         coefs_lag = coefs[:, :, :-1]
         coefs = coefs[:, :, 1:]
         return coefs - coefs_lag
-
-    def create_mdl(self, coefs):
-        outputs = []
-        inputs = []
-        steps = []
-        coefs_mdl = []
-        N = coefs.shape[-1]
-        for i in range(self.n_cvs):
-            for j in range(self.n_mvs):
-                outputs += [f"CV_{i+1}" for x in range(N)]
-                inputs += [f"MV_{j+1}" for x in range(N)]
-                steps += [x for x in range(N)]
-                coefs_mdl += list(coefs[i, j, :].ravel())
-
-        mdl_df = pd.DataFrame.from_dict(
-            dict(
-                zip(
-                    ["output", "input", "steps", "coef"],
-                    [outputs, inputs, steps, coefs_mdl],
-                )
-            )
-        )
-
-        return mdl_df
 
     def create_data(self, output_idx, output, inputs):
         data = pd.DataFrame()
