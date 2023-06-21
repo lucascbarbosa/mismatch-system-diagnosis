@@ -1,17 +1,12 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
-from scipy.linalg import schur
 from scipy.stats import normaltest, norm
-from statsmodels.tsa.stattools import acf
-import matplotlib.pyplot as plt
-import seaborn as sns
-from multiprocessing import Pool
 from packages.simulate_model import Simulator
-
+import seaborn as sns
+import matplotlib.pyplot as plt
 #########
 # Paths #
-simualtion_dir = "03__modelagem/2023-04-05__revisao algorítimo/modelos/resultados/REFAP/simulacao/%s"
+simualtion_dir = "resultados/%s"
 
 ########
 # Plot #
@@ -23,22 +18,18 @@ def get_changes(mismatch_log: np.array):
     matches = np.where(changes == -1)[0] + 1
     return matches, mismatches
 
+def forecast(model, y_real, u, horizon):
+    """Prevê as saídas em um horizonte específico"""
+    A, B = model
+    y_pred = np.zeros(y_real.shape)
+    y_pred[0, :] = y_real[0, :]
+    N = y_real.shape[0]
+    for i in range(1, N):
+        y_row = y_pred[i - 1, :].reshape((n_cvs, 1))
+        u_row = u[i - 1, :].reshape((n_mvs, 1))
+        y_pred[i, :] = np.dot(A, y_row).T + np.dot(B, u_row).T 
 
-def backtesting(args):
-    """Previsão do backtest"""
-    model, temp_model_database, ref_time, max_horizon = args
-    result = model.predict(
-        database=temp_model_database, max_horizon=max_horizon
-    )
-    prediction = result[["time", "forecast_h", "prediction"]].dropna()
-    prediction = prediction[ref_time < prediction["time"]].copy()
-    prediction["ref_time"] = ref_time
-    prediction["output"] = output_var
-    prediction = prediction[
-        ["time", "output", "ref_time", "forecast_h", "prediction"]
-    ]
-    return prediction
-
+    return y_pred         
 
 def plot_simulation(
     matches: list,
@@ -73,48 +64,56 @@ def plot_simulation(
     plt.show()
 
 
-def compute_metrics(
-    y_real, y_pred, u, mismatch_log, history, tol=1e-10, save=True
-):
+def compute_error(y_real, y_pred, mismatch_log, tol=1e-10, save=True):
     """Gera as métricas da previsão"""
-    y_pred_match = y_pred[np.where(mismatch_log == 0)[0]]
-    y_real_match = y_real[np.where(mismatch_log == 0)[0]]
-    u_match = u[np.where(mismatch_log == 0)[0]]
-
-    error_match = y_pred_match - y_real_match
-    mae_match = np.mean(np.abs(error_match))
-    mape_match = np.mean(
-        np.abs(error_match)
-        / np.where(
-            y_real_match == 0,
+    error = y_pred - y_real
+    error_abs = np.abs(error)
+    error_percent = np.abs(error) / np.where(
+            y_real == 0,
             tol,
             np.where(
-                np.abs(y_real_match) < tol,
-                np.sign(y_real_match) * tol,
-                y_real_match,
+                np.abs(y_real) < tol,
+                np.sign(y_real) * tol,
+                y_real,
             ),
         )
-    )
 
-    mse_match = (error_match) ** 2
-    std_match = (error_match).std()
-    k2, p_norm = normaltest(error_match)
-    p_unbias = norm.cdf(mae_match, loc=0, scale=std_match)
-    y_pred_mismatch = y_pred[np.where(mismatch_log == 1)[0]]
-    y_real_mismatch = y_real[np.where(mismatch_log == 1)[0]]
-    u_mismatch = u[np.where(mismatch_log == 1)[0]]
+    error_sqr = (error) ** 2
+    std = (error).std()
+    # _, p_norm = normaltest(error)
+    # p_unbias = norm.cdf(error_abs, loc=0, scale=std)
 
+    changes_real = y_real[1:] - y_real[:-1]
+    changes_pred = y_pred[1:] - y_pred[:-1]
+    directions = np.sign(changes_real) == np.sign(changes_pred).astype(int)
+    directions = np.append(np.zeros(1), directions)
 
+    errors_df = pd.DataFrame()
+    for i in range(error.shape[1]):
+        errors_df[f'error_CV_{i+1}'] = error[:,i]
+        errors_df[f'error_abs_CV_{i+1}'] = error_abs[:,i]
+        errors_df[f'error_sqr_CV_{i+1}'] = error_sqr[:,i]
+        errors_df[f'error_percent_CV_{i+1}'] = error_percent[:,i]
+
+    errors_df[f'mismatch_log'] = mismatch_log
+    return errors_df
+
+def compute_metric(errors_df, history):
+    errors_match = errors_df[errors_df["mismatch_log"]==0.0]
+    errors_mismatch = errors_df[errors_df["mismatch_log"]==1.0]
+
+    for i in range(n_cvs):
+        pass
 ####################
 # Inicia simulação #
 n_cvs = 5
 n_mvs = 5
 h = 0.01  # Passo
 sys_span = 10  # Módulo máximo dos valores randômicos das matrizes dinâmicas
-noise_span = sys_span / 10  # Amplitude máxima do ruído
+noise_span = sys_span / 500 # Amplitude máxima do ruído
 sim = Simulator(n_cvs, n_mvs, h, sys_span, noise_span, simualtion_dir)
 
-N = 1000  # Horizonte de simulação
+N = 5000  # Horizonte de simulação
 y0 = [0, 0, 0, 0, 0]  # Estado inicial
 mismatch_ratio = 0.5
 history = 30  # Horizonte passado analizado (varia)
@@ -123,40 +122,30 @@ max_horizon = 480
 noise = True
 
 # Simula
-u, y_real, mismatch_log, models = sim.simulate(
+u, y_real, mismatch_log, models_pred, models_real= sim.simulate(
     N, y0, mismatch_ratio, history, noise=noise
 )
 matches, mismatches = get_changes(mismatch_log)
-# scaler = MinMaxScaler()
-# u = scaler.fit_transform(u)
+matches_limits = np.zeros(matches.shape[0]+2).astype(int)
+matches_limits[0] = 0
+matches_limits[1:-1] = matches
+matches_limits[-1] = N
+y_pred = np.zeros(y_real.shape)
 
-outputs_mdl = []
-for m in range(len(models)):
-    model = models[m]
-    print(f"Model {m+1}")
-    # Extrai os coeficientes e gera o mdl
-    coefs_model = sim.get_fir_coefs(model, n_coefs)
-    outputs_mdl = sim.create_mdl(coefs_model)
-
+for m in range(len(models_pred)):
+    model= models_pred[m]
+    # print(f"Model {m+1}")
+    y_window = y_real[matches_limits[m]:matches_limits[m+1],:]
+    u_window = u[matches_limits[m]:matches_limits[m+1],:]
     # Gera o banco de dados de operação
-    for i in range(n_cvs):
-        output_var = f"CV_{i+1}"
-        print("Predicting:", output_var)
-        model_database = sim.create_data(i, y_real, u)
-        output_mdl = outputs_mdl[outputs_mdl["output"] == output_var].copy()
-        mdl = MDLModel(mdl_parameters=output_mdl, output=output_var)
-        list_args = []
-        for j in range(len(model_database)):
-            temp_model_database = model_database.copy()
-            ref_time = model_database.iloc[j, 0]
-            is_after_ref_time = ref_time < model_database["time"]
-            temp_model_database.loc[is_after_ref_time, output_var] = np.nan
-            list_args.append([mdl, temp_model_database, ref_time, max_horizon])
+    result = forecast(model,
+                      y_window, 
+                      u, 
+                      -1)
+    y_pred[matches_limits[m]:matches_limits[m+1],:] = result
+    # Plota simulação
 
-        with Pool(18) as p:
-            results = p.map(backtesting, list_args)
-
-# Plota simulação1
 filename_plot = simualtion_dir % "simulation_forecast.png"
-# plot_simulation(matches, mismatches, u, y_real, y_pred, filename_plot)
-# compute_metrics(y_real, y_pred, u, mismatch_log, history)
+# plot_simulation(matches, mismatches, u, y_real, y_pred, filename=None)
+errors_df = compute_error(y_real, y_pred, mismatch_log)
+compute_metric(errors_df, history)

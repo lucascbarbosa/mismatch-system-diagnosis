@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 
-
 class Simulator(object):
     def __init__(
         self,
@@ -41,7 +40,7 @@ class Simulator(object):
         return u
 
     def simulate(self, N, y0, mismatch_ratio, history, noise=True):
-        u_data = self.create_ctrl(N)
+        u = self.create_ctrl(N)
         y = np.zeros((N, self.n_cvs))
         y[0, :] = y0
 
@@ -54,11 +53,10 @@ class Simulator(object):
 
         real_models = [(A, B)]
         estimated_models = [(A_hat, B_hat)]
-
         for i in range(1, N):
             y_row = y[i - 1].reshape((self.n_cvs, 1))
-            u = u_data[i - 1].reshape((self.n_mvs, 1))
-            y[i, :] = np.dot(A, y_row).T + np.dot(B, u).T
+            u_row = u[i - 1].reshape((self.n_mvs, 1))
+            y[i, :] = np.dot(A, y_row).T + np.dot(B, u_row).T
             if noise:
                 y[i, :] += np.random.normal(loc=0.0, scale=self.noise_span)
 
@@ -75,6 +73,10 @@ class Simulator(object):
                 match_count = 0
                 A, B = self.create_system()
                 real_models.append((A, B))
+                # print("Mismatch")
+                # print(i)
+                # print(A)
+                # print(A_hat)
             if (
                 rand > mismatch_ratio
                 and mismatch
@@ -84,7 +86,10 @@ class Simulator(object):
                 mismatch_count = 0
                 A_hat, B_hat = A.copy(), B.copy()
                 estimated_models.append((A_hat, B_hat))
-                y[i, :] = y[i - 1, :]
+                # print("Match")
+                # print(i)
+                # print(A)
+                # print(A_hat)
 
             if mismatch:
                 mismatch_count += 1
@@ -93,34 +98,4 @@ class Simulator(object):
 
             mismatch_log[i] = int(mismatch)
 
-        return u_data, y, mismatch_log, estimated_models
-
-    def get_fir_coefs(self, model, N):
-        A, B = model
-        coefs = np.zeros((self.n_cvs, self.n_mvs, N + 1))
-        for i in range(self.n_mvs):
-            for j in range(self.n_cvs):
-                y = np.zeros((N + 1, self.n_cvs))
-                u = np.zeros((self.n_mvs, 1))
-                u[i, 0] = 1
-                for k in range(1, N + 1):
-                    y_row = y[k - 1, :].reshape((self.n_cvs, 1))
-                    y[k, :] = np.dot(A, y_row).T + np.dot(B, u).T
-                    coefs[:, j, k] = y[k, :]
-
-        coefs_lag = coefs[:, :, :-1]
-        coefs = coefs[:, :, 1:]
-        return coefs - coefs_lag
-
-    def create_data(self, output_idx, output, inputs):
-        data = pd.DataFrame()
-        time = pd.date_range(
-            start=0, periods=output.shape[0], freq="20T"
-        ).to_numpy()
-        data["time"] = time
-
-        output = output[:, output_idx]
-        data[f"CV_{output_idx+1}"] = output
-
-        data[[f"MV_{i+1}" for i in range(self.n_mvs)]] = inputs
-        return data
+        return u, y, mismatch_log, estimated_models, real_models
