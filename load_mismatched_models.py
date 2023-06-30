@@ -32,7 +32,7 @@ original_filename = excel_dir % model_filename_excel
 original_mdl = pd.read_excel(excel_dir % model_filename_excel)
 
 # Mismatch parameters
-tempo_morto_mods = np.arange(-9, 10, 1)
+tempo_morto_mods = np.arange(-9,  10, 1)
 ganho_mods = np.concatenate(
     (np.array([0.1, 0.25, 0.5, 0.75]), np.arange(1, 10, 1))
 )
