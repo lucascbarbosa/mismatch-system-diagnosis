@@ -8,11 +8,11 @@ from sklearn.neural_network import MLPRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 
-#########
+######### 
 # Paths #
+models_dir = "modelos/excel/"
 results_dir = "resultados/"
 output_var = "CV_1"
-
 #############
 # Functions #
 
