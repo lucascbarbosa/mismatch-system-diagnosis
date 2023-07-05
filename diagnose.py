@@ -107,3 +107,4 @@ weights = [0.2, 0.2, 0.6]
 weights = dict(zip(metrics_ganho[model_name].keys(), weights))
 best_model_ganho, score_ganho = select_model(models_ganho, metrics_ganho, weights)
 best_model_tempo_morto, score_tempo_morto = select_model(models_tempo_morto, metrics_tempo_morto, weights)
+

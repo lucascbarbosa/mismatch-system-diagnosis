@@ -114,7 +114,7 @@ n_mvs = 5
 h = 0.01  # Passo
 sys_span = 10  # Módulo máximo dos valores randômicos das matrizes dinâmicas
 noise_span = sys_span / 10  # Amplitude máxima do ruído
-sim = Simulator(n_cvs, n_mvs, h, sys_span, noise_span, simualtion_dir)
+sim = Simulator(n_cvs, n_mvs, h, sys_span, noise_span, simulation_dir)
 
 N = 1000  # Horizonte de simulação
 y0 = [0, 0, 0, 0, 0]  # Estado inicial
@@ -158,6 +158,6 @@ for m in range(len(models)):
             results = p.map(backtesting, list_args)
 
 # Plota simulação1
-filename_plot = simualtion_dir % "simulation_forecast.png"
+filename_plot = simulation_dir % "simulation_forecast.png"
 # plot_simulation(matches, mismatches, u, y_real, y_pred, filename_plot)
 # compute_metrics(y_real, y_pred, u, mismatch_log, history)
